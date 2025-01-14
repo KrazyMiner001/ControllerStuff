@@ -1,15 +1,15 @@
 
-use std::{mem, ops::{Add, AddAssign}, ptr};
+use std::{mem, ops::{Add, AddAssign}};
 
-use color_space::{Hsl, Hsv, ToRgb};
-use sdl2::{controller::Axis, event::{self, Event, EventType}, keyboard::Keycode, pixels::Color, sys::{SDL_CommonEvent, SDL_ControllerSensorEvent, SDL_Event, SDL_GameControllerGetJoystick, SDL_GameControllerOpen, SDL_GameControllerSetSensorEnabled, SDL_PollEvent, SDL_PumpEvents, SDL_QuitEvent, SDL_SensorEvent, SDL_SensorType, SDL_WindowEventID}};
+use color_space::{Hsl, ToRgb};
+use sdl2::{event::{Event}, keyboard::Keycode, pixels::Color, sys::{SDL_ControllerSensorEvent, SDL_GameControllerOpen, SDL_GameControllerSetSensorEnabled, SDL_PollEvent, SDL_PumpEvents, SDL_SensorType}};
 
 fn main() {
     sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
 
     let sdl = sdl2::init().expect("Sdl failed to initialise");
 
-    let mut event_pump = sdl.event_pump().unwrap();
+    let event_pump = sdl.event_pump().unwrap();
     let window = sdl.video().unwrap().window("Test", 800, 600)
         .position_centered()
         .build()
@@ -30,7 +30,7 @@ fn main() {
         .map_err(|e| format!("can't enumerate joysticks: {}", e))
         .unwrap();
 
-    let mut controller = (0..available)
+    let controller = (0..available)
         .find_map(|id| {
             if !game_controller_subsystem.is_game_controller(id) {
                 println!("{} is not a game controller", id);
