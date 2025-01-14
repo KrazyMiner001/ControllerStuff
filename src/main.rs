@@ -1,53 +1,32 @@
 
-use std::{mem, ops::{Add, AddAssign}};
+use std::{f64::consts::PI, mem, ops::{Add, AddAssign}, time::Duration};
 
 use color_space::{Hsl, ToRgb};
-use sdl2::{event::{Event}, keyboard::Keycode, pixels::Color, sys::{SDL_ControllerSensorEvent, SDL_GameControllerOpen, SDL_GameControllerSetSensorEnabled, SDL_PollEvent, SDL_PumpEvents, SDL_SensorType}};
+use sdl3::{event::Event, gamepad::Button, keyboard::Keycode, pixels::Color, sys::{events::{SDL_GamepadSensorEvent, SDL_PollEvent, SDL_PumpEvents}, gamepad::{SDL_OpenGamepad, SDL_SetGamepadSensorEnabled}, sensor::SDL_SENSOR_GYRO}};
 
 fn main() {
-    sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
+    sdl3::hint::set("SDL_JOYSTICK_THREAD", "1");
 
-    let sdl = sdl2::init().expect("Sdl failed to initialise");
+    let sdl = sdl3::init().expect("Sdl failed to initialise");
 
-    let event_pump = sdl.event_pump().unwrap();
     let window = sdl.video().unwrap().window("Test", 800, 600)
         .position_centered()
         .build()
         .unwrap();
 
-    let mut canvas = window.into_canvas()
-        .build()
-        .unwrap();
+    let mut canvas = window.into_canvas();
 
     canvas.set_draw_color(Color::WHITE);
     canvas.clear();
     canvas.present();
 
-    let game_controller_subsystem = sdl.game_controller().unwrap();
-
-    let available = game_controller_subsystem
-        .num_joysticks()
-        .map_err(|e| format!("can't enumerate joysticks: {}", e))
-        .unwrap();
-
-    let controller = (0..available)
-        .find_map(|id| {
-            if !game_controller_subsystem.is_game_controller(id) {
-                println!("{} is not a game controller", id);
-                return None;
-            }
-
-            Some(game_controller_subsystem.open(id).unwrap())
-        })
-        .unwrap();
-
-    let raw_controller = unsafe { SDL_GameControllerOpen(0) };
+    let raw_controller = unsafe { SDL_OpenGamepad(4) };
 
     unsafe { 
-        SDL_GameControllerSetSensorEnabled(
-            raw_controller, 
-            SDL_SensorType::SDL_SENSOR_GYRO, 
-            sdl2::sys::SDL_bool::SDL_TRUE
+        SDL_SetGamepadSensorEnabled(
+            raw_controller,
+            SDL_SENSOR_GYRO,
+            true
         );
     };
 
@@ -57,15 +36,15 @@ fn main() {
         unsafe {
             SDL_PumpEvents();
 
-            while SDL_PollEvent(core::ptr::null_mut()) == 1 {
+            while SDL_PollEvent(core::ptr::null_mut()) {
                 let mut raw = mem::MaybeUninit::uninit();
 
                 SDL_PollEvent(raw.as_mut_ptr());
 
                 let event = raw.assume_init();
 
-                match event.csensor {
-                    SDL_ControllerSensorEvent {data: [pitch, yaw, roll], type_: 1625, sensor: 2, ..} => {
+                match event.gsensor {
+                    SDL_GamepadSensorEvent {data: [pitch, yaw, roll], sensor: 2, ..} => {
                         tracked_gyro_info += TrackedGyroInfo::from_f32(
                             yaw / 10.0, 
                             pitch / 300.0, 
@@ -74,8 +53,8 @@ fn main() {
 
                         let hsv_color = Hsl::new(
                             tracked_gyro_info.yaw.rem_euclid(360.0),
-                            tracked_gyro_info.roll.cos(),
-                            tracked_gyro_info.pitch.cos()
+                            tracked_gyro_info.roll.cos() / 2.0 + 0.5,
+                            ((tracked_gyro_info.pitch - PI / 2.0).cos() + 1.0) / 2.0
                         );
 
                         let color = Color::RGB(
@@ -89,18 +68,22 @@ fn main() {
                     }
                     _ => {}
                 }
-                
+
                 match Event::from_ll(event) {
                     Event::Quit {..} |
                     Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                         break 'running
                     },
+                    Event::ControllerButtonDown { button: Button::South, .. } => {
+                        tracked_gyro_info.clear();
+                    }
                     _ => {}
                 }
             }
         }
 
         canvas.present();
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
 }
 
