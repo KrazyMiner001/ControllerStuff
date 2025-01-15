@@ -2,10 +2,10 @@
 use std::{f64::consts::PI, mem, ops::{Add, AddAssign}, time::Duration};
 
 use color_space::{Hsl, ToRgb};
-use sdl3::{event::Event, gamepad::Button, keyboard::Keycode, pixels::Color, sys::{events::{SDL_GamepadSensorEvent, SDL_PollEvent, SDL_PumpEvents}, gamepad::{SDL_OpenGamepad, SDL_SetGamepadSensorEnabled}, sensor::SDL_SENSOR_GYRO}};
+use sdl3::{event::Event, gamepad::Button, keyboard::Keycode, pixels::Color, sys::{events::{SDL_Event, SDL_GamepadDeviceEvent, SDL_GamepadSensorEvent, SDL_PollEvent, SDL_PumpEvents}, gamepad::{SDL_GetGamepads, SDL_IsGamepad, SDL_OpenGamepad, SDL_SetGamepadSensorEnabled}, sensor::{SDL_Sensor, SDL_SensorID, SDL_SensorType, SDL_SENSOR_GYRO}}};
 
 fn main() {
-    sdl3::hint::set("SDL_JOYSTICK_THREAD", "1");
+    //sdl3::hint::set("SDL_JOYSTICK_THREAD", "1");
 
     let sdl = sdl3::init().expect("Sdl failed to initialise");
 
@@ -20,14 +20,21 @@ fn main() {
     canvas.clear();
     canvas.present();
 
-    let raw_controller = unsafe { SDL_OpenGamepad(4) };
+    let gamepad_subsystem =  sdl.gamepad().unwrap();
+    let joystick_subsystem = sdl.joystick().unwrap();
 
-    unsafe { 
-        SDL_SetGamepadSensorEnabled(
-            raw_controller,
-            SDL_SENSOR_GYRO,
-            true
-        );
+    for joystick in joystick_subsystem.joysticks().unwrap() {
+        if gamepad_subsystem.is_game_controller(joystick.id) {
+            unsafe  {
+                let raw_controller = SDL_OpenGamepad(joystick.id);
+
+                SDL_SetGamepadSensorEnabled(
+                    raw_controller,
+                    SDL_SENSOR_GYRO,
+                    true
+                );
+            }
+        }
     };
 
     let mut tracked_gyro_info = TrackedGyroInfo::new(0.0, 0.0, 0.0);
@@ -50,23 +57,10 @@ fn main() {
                             pitch / 300.0, 
                             roll / 100.0
                         );
-
-                        let hsv_color = Hsl::new(
-                            tracked_gyro_info.yaw.rem_euclid(360.0),
-                            tracked_gyro_info.roll.cos() / 2.0 + 0.5,
-                            ((tracked_gyro_info.pitch - PI / 2.0).cos() + 1.0) / 2.0
-                        );
-
-                        let color = Color::RGB(
-                            hsv_color.to_rgb().r as u8, 
-                            hsv_color.to_rgb().g as u8,
-                            hsv_color.to_rgb().b as u8
-                        );
-
-                        canvas.set_draw_color(color);
-                        canvas.clear();
                     }
-                    _ => {}
+                    _ => {
+
+                    }
                 }
 
                 match Event::from_ll(event) {
@@ -76,14 +70,31 @@ fn main() {
                     },
                     Event::ControllerButtonDown { button: Button::South, .. } => {
                         tracked_gyro_info.clear();
+                    },
+                    _ => {
+
                     }
-                    _ => {}
                 }
             }
         }
 
+        let hsv_color = Hsl::new(
+            tracked_gyro_info.yaw.rem_euclid(360.0),
+            tracked_gyro_info.roll.cos() / 2.0 + 0.5,
+            ((tracked_gyro_info.pitch - PI / 2.0).cos() + 1.0) / 2.0
+        );
+
+        let color = Color::RGB(
+            hsv_color.to_rgb().r as u8, 
+            hsv_color.to_rgb().g as u8,
+            hsv_color.to_rgb().b as u8
+        );
+
+        canvas.set_draw_color(color);
+        canvas.clear();
+
         canvas.present();
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+        //::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
 }
 
